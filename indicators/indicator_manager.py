@@ -1,52 +1,137 @@
-# Contenido completo del archivo
+# indicators/indicator_manager.py
+# Versión simplificada con indicadores esenciales para ElliottWaveStrategy
 
 import pandas as pd
 import pandas_ta as ta
 
 class IndicatorManager:
     """
-    Gestiona el cálculo de indicadores técnicos en un DataFrame de klines.
+    Gestor de indicadores simplificado que calcula solo los indicadores esenciales.
+    
+    Con la integración de python-taew, la librería realizará su propio análisis 
+    internamente, pero mantenemos algunos indicadores básicos necesarios para
+    el sistema de risk management.
     """
+    
     def __init__(self):
         """
-        Inicializa el gestor de indicadores.
+        Inicializa el gestor de indicadores en modo simplificado.
         """
-        self.strategy = ta.Strategy(
-            name="Scalping SuperTool Strategy",
-            description="Una combinación de indicadores para scalping.",
-            ta=[
-                {"kind": "ema", "length": 9, "col_names": ("EMA_9")},
-                {"kind": "ema", "length": 21, "col_names": ("EMA_21")},
-                {"kind": "rsi", "length": 14, "col_names": ("RSI_14")},
-                {"kind": "macd", "fast": 12, "slow": 26, "signal": 9, "col_names": ("MACD_12_26_9", "MACDh_12_26_9", "MACDs_12_26_9")},
-                {"kind": "bbands", "length": 20, "std": 2, "col_names": ("BBL_20_2", "BBM_20_2", "BBU_20_2", "BBB_20_2", "BBP_20_2")},
-                {"kind": "atr", "length": 14, "col_names": ("ATR_14")},
-                {"kind": "donchian", "lower_length": 20, "upper_length": 20, "col_names": ("DCL_20_20", "DCM_20_20", "DCU_20_20")},
-                # --- NUEVO INDICADOR AÑADIDO ---
-                # ADX para medir la fuerza de la tendencia. Nos dará la columna ADX_14.
-                # No nos interesan las columnas DMP_14 y DMN_14 por ahora.
-                {"kind": "adx", "length": 14, "col_names": ("ADX_14", "DMP_14", "DMN_14")},
-            ]
-        )
-        print("IndicatorManager inicializado con la siguiente estrategia:")
-        print(self.strategy)
+        print("IndicatorManager inicializado en modo simplificado (con indicadores esenciales)")
+        print("Nota: Cálculo optimizado para ElliottWaveStrategy")
 
     def calculate_indicators(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Calcula todos los indicadores definidos en la estrategia sobre el DataFrame.
+        Calcula indicadores esenciales necesarios para el sistema.
+        
+        Args:
+            df (pd.DataFrame): DataFrame con datos OHLCV
+            
+        Returns:
+            pd.DataFrame: DataFrame con indicadores esenciales agregados
         """
-        df_with_indicators = df.copy()
+        try:
+            df_with_indicators = df.copy()
+            
+            # Renombramos a minúsculas para compatibilidad con pandas-ta
+            df_with_indicators.rename(columns={
+                "Open": "open", "High": "high", "Low": "low", "Close": "close", "Volume": "volume"
+            }, inplace=True)
+            
+            # Calcular solo indicadores esenciales para el sistema
+            
+            # 1. ATR - Esencial para risk management (stop loss)
+            if len(df_with_indicators) >= 14:
+                df_with_indicators['ATR_14'] = ta.atr(
+                    high=df_with_indicators['high'],
+                    low=df_with_indicators['low'],
+                    close=df_with_indicators['close'],
+                    length=14
+                )
+            else:
+                # Para datasets pequeños, usar un ATR sintético basado en volatilidad
+                price_range = df_with_indicators['high'] - df_with_indicators['low']
+                df_with_indicators['ATR_14'] = price_range.rolling(window=min(len(df_with_indicators), 5)).mean()
+            
+            # 2. RSI - Útil para filtros adicionales si necesario
+            if len(df_with_indicators) >= 14:
+                df_with_indicators['RSI_14'] = ta.rsi(
+                    close=df_with_indicators['close'],
+                    length=14
+                )
+            else:
+                # RSI sintético para datasets pequeños
+                df_with_indicators['RSI_14'] = 50.0  # Valor neutral
+            
+            # 3. EMAs simples para contexto de tendencia (opcional)
+            if len(df_with_indicators) >= 21:
+                df_with_indicators['EMA_21'] = ta.ema(
+                    close=df_with_indicators['close'],
+                    length=21
+                )
+            else:
+                df_with_indicators['EMA_21'] = df_with_indicators['close']
+            
+            # Revertir los nombres a Mayúscula inicial
+            df_with_indicators.rename(columns={
+                "open": "Open", "high": "High", "low": "Low", "close": "Close", "volume": "Volume"
+            }, inplace=True)
+            
+            # Asegurar que no hay valores NaN en indicadores críticos
+            df_with_indicators['ATR_14'] = df_with_indicators['ATR_14'].fillna(
+                df_with_indicators['ATR_14'].mean()
+            )
+            df_with_indicators['RSI_14'] = df_with_indicators['RSI_14'].fillna(50.0)
+            df_with_indicators['EMA_21'] = df_with_indicators['EMA_21'].fillna(
+                df_with_indicators['Close']
+            )
+            
+            return df_with_indicators
+            
+        except Exception as e:
+            print(f"Error calculando indicadores esenciales: {e}")
+            # Fallback: agregar indicadores sintéticos mínimos
+            df_fallback = df.copy()
+            
+            # ATR sintético basado en rango de precios
+            price_range = df_fallback['High'] - df_fallback['Low']
+            df_fallback['ATR_14'] = price_range.rolling(window=min(len(df_fallback), 5)).mean().fillna(price_range.mean())
+            
+            # Indicadores placeholder
+            df_fallback['RSI_14'] = 50.0
+            df_fallback['EMA_21'] = df_fallback['Close']
+            
+            return df_fallback
+    
+    def get_essential_indicators(self) -> list:
+        """
+        Retorna la lista de indicadores esenciales que calcula este manager.
         
-        # Renombramos a minúsculas para compatibilidad con pandas-ta.
-        df_with_indicators.rename(columns={
-            "Open": "open", "High": "high", "Low": "low", "Close": "close", "Volume": "volume"
-        }, inplace=True)
+        Returns:
+            list: Lista de nombres de indicadores
+        """
+        return ['ATR_14', 'RSI_14', 'EMA_21']
+    
+    def validate_indicators(self, df: pd.DataFrame) -> bool:
+        """
+        Valida que todos los indicadores esenciales estén presentes.
         
-        df_with_indicators.ta.strategy(self.strategy, append=True)
+        Args:
+            df (pd.DataFrame): DataFrame a validar
+            
+        Returns:
+            bool: True si todos los indicadores están presentes
+        """
+        essential_indicators = self.get_essential_indicators()
         
-        # Revertimos los nombres a Mayúscula inicial.
-        df_with_indicators.rename(columns={
-            "open": "Open", "high": "High", "low": "Low", "close": "Close", "volume": "Volume"
-        }, inplace=True)
+        for indicator in essential_indicators:
+            if indicator not in df.columns:
+                print(f"⚠️  Indicador faltante: {indicator}")
+                return False
+            
+            # Verificar que no sean todos NaN
+            if df[indicator].isna().all():
+                print(f"⚠️  Indicador con todos NaN: {indicator}")
+                return False
         
-        return df_with_indicators
+        return True

@@ -1,16 +1,16 @@
-# Contenido completo del archivo
-# Contenido completo
+# portfolio/portfolio_manager.py
+# Versión actualizada compatible con ElliottWaveStrategy
+
 import pandas as pd
 # Importaciones absolutas
 from risk_management.risk_assessor import RiskAssessor
 from risk_management.position import Position
-from signal_generators.confluence_strategy import ConfluenceStrategy
-from indicators.indicator_manager import IndicatorManager
 
-# ... (el resto del código de la clase no cambia) ...
+
 class PortfolioManager:
     """
     Gestiona un portfolio de múltiples activos, aplicando una estrategia única a cada uno.
+    Actualizado para ser compatible con ElliottWaveStrategy y estrategias anteriores.
     """
     def __init__(self, initial_capital: float, risk_per_trade_pct: float, indicator_manager, strategy, risk_assessor, max_open_positions: int = 3, verbose: bool = True):
         self.capital = initial_capital
@@ -41,8 +41,6 @@ class PortfolioManager:
         elif len(self.open_positions) < self.max_open_positions:
             self._check_new_entry(df_with_indicators, symbol)
 
-# Contenido completo de la función _check_new_entry a reemplazar
-
     def _check_new_entry(self, df: pd.DataFrame, symbol: str):
         """Busca una señal de entrada para un símbolo específico."""
         from risk_management.position import Position
@@ -55,10 +53,9 @@ class PortfolioManager:
         candle = df.iloc[-1]
         entry_price = candle['Close']
         
-        # --- CORRECCIÓN CLAVE ---
-        # No construimos el nombre de la columna aquí.
-        # Lo tomamos directamente del objeto de la estrategia, que es la fuente de verdad.
-        take_profit = candle[self.strategy.middle_band_col]
+        # --- NUEVA LÓGICA COMPATIBLE ---
+        # Determinar take profit basado en el tipo de estrategia
+        take_profit = self._calculate_take_profit(candle, direction)
         
         stop_loss = self.risk_assessor.determine_initial_sl(candle, direction)
         
@@ -71,6 +68,51 @@ class PortfolioManager:
         )
         if self.verbose:
             print(f"[{candle.name}] NUEVA POSICIÓN {direction} en {symbol}: Entrada ${entry_price:,.2f}")
+
+    def _calculate_take_profit(self, candle: pd.Series, direction: str) -> float:
+        """
+        Calcula el take profit basado en el tipo de estrategia.
+        Compatible con estrategias anteriores y ElliottWaveStrategy.
+        """
+        try:
+            # Verificar si es ElliottWaveStrategy
+            if hasattr(self.strategy, 'get_take_profit_price'):
+                # Usar el método específico de Elliott Wave
+                return self.strategy.get_take_profit_price(candle, direction)
+            
+            # Fallback para estrategias anteriores (Confluence, etc.)
+            elif hasattr(self.strategy, 'middle_band_col') and self.strategy.middle_band_col:
+                # Usar Bollinger Band media como take profit (estrategias anteriores)
+                return candle[self.strategy.middle_band_col]
+            
+            # Fallback general: usar ATR para calcular take profit
+            else:
+                atr_value = candle.get('ATR_14', 0)
+                if atr_value == 0:
+                    # Si no hay ATR, usar un porcentaje fijo
+                    multiplier = 0.02  # 2% take profit
+                else:
+                    # Usar ATR para take profit dinámico
+                    multiplier_atr = 2.0  # 2x ATR como take profit
+                    
+                if direction == 'LONG':
+                    if atr_value > 0:
+                        return candle['Close'] + (atr_value * multiplier_atr)
+                    else:
+                        return candle['Close'] * (1 + multiplier)
+                elif direction == 'SHORT':
+                    if atr_value > 0:
+                        return candle['Close'] - (atr_value * multiplier_atr)
+                    else:
+                        return candle['Close'] * (1 - multiplier)
+                        
+        except Exception as e:
+            print(f"Error calculando take profit: {e}")
+            # Fallback final: take profit conservador del 1%
+            if direction == 'LONG':
+                return candle['Close'] * 1.01
+            else:
+                return candle['Close'] * 0.99
 
     def _manage_open_position(self, latest_candle: pd.Series, symbol: str):
         """Gestiona una posición abierta, buscando SL o TP."""

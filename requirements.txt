@@ -10,6 +10,10 @@ tqdm
 quantstats
 IPython
 
-# Nota: No necesitamos numpy aquí directamente porque
-# es una sub-dependencia de pandas y quantstats.
-# pip se encargará de instalar la versión correcta.
+# === NUEVA DEPENDENCIA PARA FASE 2 ===
+# Análisis de Ondas de Elliott
+python-taew
+
+# Nota: python-taew automatiza la identificación de ondas impulsivas y correctivas
+# según la Teoría de las Ondas de Elliott, permitiendo análisis estructural avanzado
+# del mercado para nuestro nuevo paradigma de trading.
